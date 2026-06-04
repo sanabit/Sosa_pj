@@ -1,9 +1,9 @@
 
 import random
 from collections import deque
-from pokemon_types import get_effectiveness
-from moves import MOVES
-from pokemon import POKEMON
+from data.pokemon_types import get_effectiveness
+from data.moves import MOVES
+from data.pokemon import POKEMON
 
 class Pokemon:
     """
@@ -138,6 +138,7 @@ class BattleEngine:
             accuracy = MOVES[move_name]["accuracy"]
             is_hit = random.randint(1, 100) <= accuracy
             
+            hit_text = ""
             if is_hit:
                 # 데미지 계산 및 반영
                 damage = self.calculate_damage(attacker, defender, move_name)
@@ -159,7 +160,8 @@ class BattleEngine:
             
             # 테스트를 위한 로그 출력 (추후 Arcade 연동 시 제거 가능)
             print(f"[전투] {attacker.ko_name}의 {MOVES[move_name]['ko']}!")
-            print(hit_text)
+            if not is_hit:
+                print(hit_text)
                 
             if is_hit and damage == 0 and MOVES[move_name]["category"] != "Status":
                 print(f" -> 효과가 없는 것 같다...")

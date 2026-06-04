@@ -1,5 +1,5 @@
 
-# data/types.py
+# data/pokemon_types.py
 
 TYPES = [
     "Normal", "Fire", "Water", "Electric", "Grass", "Ice",
