@@ -6,7 +6,7 @@ from data.moves import MOVES
 # --- 화면 설정 ---
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-SCREEN_TITLE = "포켓몬 2대1 배틀 시뮬레이터"
+SCREEN_TITLE = "이상과 진실"
 
 # --- 상태(State) 상수 ---
 STATE_P1_SELECT = 1     # 1번 포켓몬 기술 선택 중
@@ -22,10 +22,11 @@ class BattleGame(arcade.Window):
         # --- 데이터 엔진 및 객체 초기화 ---
         self.engine = BattleEngine()
         
-        # 포켓몬 객체 생성
+        # 포켓몬 객체 생성 (Primarina: 누리레느, Zekrom: 제크로무, Reshiram: 레시라무)
+        # 샹델라와 이상해꽃도 대기 멤버로 고려 가능하지만, 현재는 2인 배틀이므로 p1, p2를 설정
         self.p1 = Pokemon("Primarina")
-        self.p2 = Pokemon("Chandelure")
-        self.boss = Pokemon("Zekrom")
+        self.p2 = Pokemon("Zekrom") # 샹델라 대신 제크로무로 변경 가능
+        self.boss = Pokemon("Reshiram")
 
         # 기술 목록 (한글 표시용)
         self.p1_moves_ko = [MOVES[m]["ko"] for m in self.p1.moves]

@@ -57,5 +57,19 @@ POKEMON = {
         },
         "ability": "Overgrow",
         "moves": ["Synthesis", "Sludge Bomb", "Energy Ball", "Pollen Puff"]
+    },
+    "Reshiram": {
+        "ko": "레시라무",
+        "types": ["Dragon", "Fire"],
+        "base_stats": {
+            "hp": 100,
+            "attack": 120,
+            "defense": 100,
+            "sp_atk": 150,
+            "sp_def": 120,
+            "speed": 90
+        },
+        "ability": "Turboblaze",
+        "moves": ["Fusion Flare", "Hyper Voice", "Heat Wave", "Dragon Pulse"]
     }
 }

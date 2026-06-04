@@ -17,5 +17,9 @@ ABILITIES = {
     "Overgrow": {
         "ko": "심록",
         "description": "Powers up Grass-type moves when the Pokémon's HP is low."
+    },
+    "Turboblaze": {
+        "ko": "터보블레이즈",
+        "description": "The Pokémon can employ its moves regardless of the target's Ability."
     }
 }
