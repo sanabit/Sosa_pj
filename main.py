@@ -17,12 +17,12 @@ STATE_GAME_OVER = 4     # 전투 종료
 class BattleGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-        arcade.set_background_color(arcade.color.BLACK) #나중에 수정해야댐
+        arcade.set_background_color(arcade.color.BLACK)
 
         # --- 데이터 엔진 및 객체 초기화 ---
         self.engine = BattleEngine()
         
-        # 포켓몬 객체 생성 (Primarina: 누리레느, Zekrom: 제크로무, Reshiram: 레시라무)
+        # 포켓몬 객체 생성
         self.p1 = Pokemon("Primarina")
         self.p2 = Pokemon("Zekrom")
         self.boss = Pokemon("Reshiram")
@@ -126,6 +126,15 @@ class BattleGame(arcade.Window):
             self.game_over_text.draw()
 
     def on_key_press(self, key, modifiers):
+        """키보드 입력을 처리하는 상태 머신 (뇌)"""
+        # [강력 수정] 언제 어디서든 Esc를 누르면 즉시 창을 닫고 종료
+        if key == arcade.key.ESCAPE:
+            self.close()
+            return
+
+        if self.current_state == STATE_GAME_OVER:
+            return
+
         if self.current_state in [STATE_P1_SELECT, STATE_P2_SELECT]:
             if key == arcade.key.UP and self.cursor_index >= 2:
                 self.cursor_index -= 2
@@ -157,7 +166,6 @@ class BattleGame(arcade.Window):
                 if self.log_queue:
                     self._update_visible_logs()
                 else:
-                    # 모든 로그를 다 읽었을 때
                     if self.boss.is_fainted() or (self.p1.is_fainted() and self.p2.is_fainted()):
                         self.current_state = STATE_GAME_OVER
                         msg = f"승리했습니다! {self.boss.ko_name}을(를) 물리쳤습니다." if self.boss.is_fainted() else "패배했습니다... 모든 포켓몬이 쓰러졌습니다."
@@ -170,9 +178,6 @@ class BattleGame(arcade.Window):
                         self.cursor_index = 0
                         self.log_queue = ["어떤 기술을 사용할까?"]
                         self._update_visible_logs()
-        
-        elif key == arcade.key.ESCAPE:
-            arcade.exit()
 
     def start_battle_phase(self):
         self.current_state = STATE_BATTLE_PHASE
