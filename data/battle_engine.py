@@ -1,4 +1,3 @@
-
 import random
 from collections import deque
 from data.pokemon_types import get_effectiveness
@@ -124,25 +123,29 @@ class BattleEngine:
 
     def execute_turn(self, action_list):
         """
-        행동 리스트를 받아 스피드 순서대로 턴을 처리함
+        행동 리스트를 받아 우선도와 스피드 순서대로 턴을 처리함
         action_list 형식: [{'attacker': Pokemon 객체, 'defender': Pokemon 객체, 'move': '기술명'}, ...]
         """
-        # 1. 턴 시작 시 모든 포켓몬의 방어 상태 초기화
-        all_pokemon = set()
+        # 1. 모든 참여자 상태 리셋
+        participants = set()
         for action in action_list:
-            all_pokemon.add(action['attacker'])
-            all_pokemon.add(action['defender'])
+            participants.add(action['attacker'])
+            if action.get('defender'):
+                participants.add(action['defender'])
         
-        for p in all_pokemon:
+        for p in participants:
             p.is_protecting = False
             p.is_wide_guarding = False
 
-        # 2. 스피드 스탯 기준 내림차순 정렬 (우선도 로직은 단순화를 위해 스피드만 고려)
-        sorted_actions = sorted(action_list, key=lambda x: x['attacker'].speed, reverse=True)
-        
-        # 3. 순서대로 처리하기 위한 큐(Queue) 생성
+        # 2. 우선도 및 스피드 기준 정렬
+        def sort_key(action):
+            move_name = action['move']
+            priority = MOVES[move_name].get('priority', 0)
+            speed = action['attacker'].speed
+            return (priority, speed)
+            
+        sorted_actions = sorted(action_list, key=sort_key, reverse=True)
         action_queue = deque(sorted_actions)
-        
         results = []
         
         while action_queue:
@@ -155,33 +158,44 @@ class BattleEngine:
                 
             move = MOVES[move_name]
             
-            # 타겟 결정 로직
+            # 기술 사용 선언 (로그의 첫 줄)
+            results.append({
+                "attacker": attacker.ko_name,
+                "defender": "",
+                "move": move["ko"],
+                "damage": 0,
+                "is_hit": True,
+                "is_ko": False,
+                "msg": f"{attacker.ko_name}의 {move['ko']}!"
+            })
+            
+            # 타겟 수집
             targets = []
             if move["target"] == "all_opponents":
-                # 공격자의 반대 진영 수집 (단순화를 위해 action_list의 다른 참여자 중 defender 측 탐색)
-                # 여기서는 action['defender']가 포함된 진영의 모든 생존자를 타겟으로 함
-                # 실제 로직에서는 진영 구분이 필요하지만, 현재 2대1 구조에 맞춰 구현
-                for p in all_pokemon:
+                for p in participants:
                     if p != attacker and not p.is_fainted():
-                        # 보스가 공격자면 플레이어들, 플레이어가 공격자면 보스
                         if (attacker.name == "Reshiram" and p.name != "Reshiram") or \
                            (attacker.name != "Reshiram" and p.name == "Reshiram"):
                             targets.append(p)
+                targets.sort(key=lambda x: x.speed, reverse=True)
             elif move["target"] == "self":
                 targets = [attacker]
             elif move["target"] == "all":
-                targets = list(all_pokemon)
+                targets = list(participants)
+                targets.sort(key=lambda x: x.speed, reverse=True)
             else: # single or others
-                targets = [action['defender']]
+                if action.get('defender'):
+                    targets = [action['defender']]
+                else:
+                    targets = [attacker]
 
+            # 각 타겟에 대해 효과 적용
             for defender in targets:
                 if defender.is_fainted() and move["target"] != "all":
                     continue
 
-                # 1. 명중률 계산
                 accuracy = move["accuracy"]
                 is_hit = random.randint(1, 100) <= accuracy
-                
                 damage = 0
                 msg = ""
                 is_ko = False
@@ -189,20 +203,18 @@ class BattleEngine:
                 if not is_hit:
                     msg = f"{defender.ko_name}에게는 맞지 않았다!"
                 else:
-                    # 기술 카테고리에 따른 분기
                     if move["category"] == "Status":
                         if move_name == "Protect":
                             attacker.is_protecting = True
                             msg = f"{attacker.ko_name}은(는) 방어 태세에 들어갔다!"
                         elif move_name == "Wide Guard":
-                            # 사용자 및 같은 진영 아군 보호
-                            for p in all_pokemon:
+                            for p in participants:
                                 if (attacker.name == "Reshiram" and p.name == "Reshiram") or \
                                    (attacker.name != "Reshiram" and p.name != "Reshiram"):
                                     p.is_wide_guarding = True
                             msg = f"{attacker.ko_name} 측이 광역 공격으로부터 보호받는다!"
                         elif move_name == "Haze":
-                            for p in all_pokemon:
+                            for p in participants:
                                 for stat in p.stat_stages:
                                     p.stat_stages[stat] = 0
                             msg = "필드의 모든 랭크 변화가 초기화되었다!"
@@ -215,19 +227,18 @@ class BattleEngine:
                             attacker.hp = min(attacker.max_hp, attacker.hp + heal_amt)
                             msg = f"{attacker.ko_name}은(는) 체력을 회복했다!"
                     else:
-                        # 공격기 (Physical/Special)
-                        # 방어벽 체크
+                        # 공격기
                         if defender.is_protecting:
-                            msg = f"{defender.ko_name}이(가) 방어로 공격을 막아냈다!"
+                            msg = f"{defender.ko_name}은(는) 공격으로부터 몸을 지켰다!"
                         elif move["target"] == "all_opponents" and defender.is_wide_guarding:
                             msg = f"{defender.ko_name}이(가) 와이드가드로 광역 공격을 막아냈다!"
                         else:
                             damage = self.calculate_damage(attacker, defender, move_name)
                             defender.hp = max(0, defender.hp - damage)
                             is_ko = defender.is_fainted()
-                            msg = f"{attacker.ko_name}의 {move['ko']}!"
+                            msg = f"{defender.ko_name}에게 {damage}의 데미지!"
 
-                turn_info = {
+                results.append({
                     "attacker": attacker.ko_name,
                     "defender": defender.ko_name,
                     "move": move["ko"],
@@ -235,7 +246,6 @@ class BattleEngine:
                     "is_hit": is_hit,
                     "is_ko": is_ko,
                     "msg": msg
-                }
-                results.append(turn_info)
+                })
         
         return results

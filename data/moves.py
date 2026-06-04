@@ -20,6 +20,7 @@ MOVES = {
         "accuracy": 100,
         "pp": 10,
         "target": "self",
+        "priority": 4,
         "description": "Enables the user to evade all attacks. Its chance of failing rises if it is used in succession."
     },
     "Calm Mind": {
@@ -100,6 +101,7 @@ MOVES = {
         "accuracy": 100,
         "pp": 10,
         "target": "all_allies",
+        "priority": 3,
         "description": "The user and its allies are protected from wide-ranging attacks for one turn."
     },
     "Flamethrower": {

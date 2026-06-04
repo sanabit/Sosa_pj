@@ -23,15 +23,13 @@ class BattleGame(arcade.Window):
         self.engine = BattleEngine()
         
         # 포켓몬 객체 생성 (Primarina: 누리레느, Zekrom: 제크로무, Reshiram: 레시라무)
-        # 샹델라와 이상해꽃도 대기 멤버로 고려 가능하지만, 현재는 2인 배틀이므로 p1, p2를 설정
-        self.p1 = Pokemon("Primarina") # 값 수정하기
-        self.p2 = Pokemon("Zekrom") # 샹델라 대신 제크로무로 변경 가능
+        self.p1 = Pokemon("Primarina")
+        self.p2 = Pokemon("Zekrom")
         self.boss = Pokemon("Reshiram")
 
         # 기술 목록 (한글 표시용)
         self.p1_moves_ko = [MOVES[m]["ko"] for m in self.p1.moves]
         self.p2_moves_ko = [MOVES[m]["ko"] for m in self.p2.moves]
-        # 시작할 때 기술 목록 보여주는 것
 
         # --- 시스템 변수 초기화
         self.current_state = STATE_P1_SELECT
@@ -39,24 +37,30 @@ class BattleGame(arcade.Window):
         self.p1_selected_move_idx = None
         self.p2_selected_move_idx = None
         
-        self.battle_logs = [f"야생의 {self.boss.ko_name}이(가) 나타났다!", "어떤 기술을 사용할까?"]
-        # 야생 아님. 시작 로그 추가해야함
+        # 화면 하단에 띄울 전투 로그 및 페이지 관리
+        self.log_queue = [f"야생의 {self.boss.ko_name}이(가) 나타났다!", "어떤 기술을 사용할까?"]
+        self.visible_logs = []  # 현재 화면에 보이는 최대 2줄
+        self._update_visible_logs()
 
-
-        # --- 성능 최적화를 위한 Text 객체 관리 (자주 변하지 않는 텍스트) ---
+        # --- 성능 최적화를 위한 Text 객체 관리 ---
         self.boss_label = arcade.Text("", 400, 540, arcade.color.WHITE, 16, bold=True, anchor_x="center")
         self.p1_label = arcade.Text("", 200, 310, arcade.color.WHITE, 14, align="center", anchor_x="center", multiline=True, width=200)
         self.p2_label = arcade.Text("", 600, 310, arcade.color.WHITE, 14, align="center", anchor_x="center", multiline=True, width=200)
-        self.log_texts = [arcade.Text("", 30, 120 - (i * 30), arcade.color.WHITE, 16) for i in range(4)]
+        self.log_texts = [arcade.Text("", 30, 110 - (i * 40), arcade.color.WHITE, 16) for i in range(2)]
         self.menu_title = arcade.Text("", 30, 120, arcade.color.YELLOW, 16, bold=True)
         self.undo_hint = arcade.Text("(B 키를 누르면 이전 포켓몬 취소)", 250, 120, arcade.color.GRAY, 12)
         self.move_texts = [arcade.Text("", 0, 0, arcade.color.WHITE, 16) for _ in range(4)]
-        self.continue_text = arcade.Text("▶ 엔터를 누르면 계속...", 600, 30, arcade.color.YELLOW, 14)
+        self.continue_text = arcade.Text("▶ 엔터를 눌러 다음...", 600, 30, arcade.color.YELLOW, 14)
         self.game_over_text = arcade.Text("▶ 전투 종료 (Esc를 눌러 종료)", 550, 30, arcade.color.RED, 14)
 
+    def _update_visible_logs(self):
+        """현재 로그 큐에서 최대 2줄을 가져와 visible_logs를 업데이트합니다."""
+        self.visible_logs = []
+        for _ in range(2):
+            if self.log_queue:
+                self.visible_logs.append(self.log_queue.pop(0))
+
     def on_draw(self):
-        """화면에 도형과 텍스트를 그리는 메서드 (눈)"""
-        # [수정] start_render() 대신 self.clear() 사용 최신문법
         self.clear()
 
         # 1. 보스 (레시라무)
@@ -109,15 +113,15 @@ class BattleGame(arcade.Window):
             t.draw()
 
     def draw_battle_logs(self):
-        display_logs = self.battle_logs[-4:]
-        for i, log in enumerate(display_logs):
+        for i, log in enumerate(self.visible_logs):
             if i < len(self.log_texts):
                 t = self.log_texts[i]
                 t.text = log
                 t.draw()
         
         if self.current_state == STATE_BATTLE_PHASE:
-            self.continue_text.draw()
+            if self.log_queue or self.visible_logs:
+                self.continue_text.draw()
         elif self.current_state == STATE_GAME_OVER:
             self.game_over_text.draw()
 
@@ -150,26 +154,30 @@ class BattleGame(arcade.Window):
 
         elif self.current_state == STATE_BATTLE_PHASE:
             if key == arcade.key.ENTER:
-                if self.boss.is_fainted() or (self.p1.is_fainted() and self.p2.is_fainted()):
-                    self.current_state = STATE_GAME_OVER
-                    if self.boss.is_fainted():
-                        self.battle_logs.append(f"승리했습니다! {self.boss.ko_name}을(를) 물리쳤습니다.")
-                    else:
-                        self.battle_logs.append("패배했습니다... 모든 포켓몬이 쓰러졌습니다.")
+                if self.log_queue:
+                    self._update_visible_logs()
                 else:
-                    if self.p1.is_fainted():
-                        self.current_state = STATE_P2_SELECT
+                    # 모든 로그를 다 읽었을 때
+                    if self.boss.is_fainted() or (self.p1.is_fainted() and self.p2.is_fainted()):
+                        self.current_state = STATE_GAME_OVER
+                        msg = f"승리했습니다! {self.boss.ko_name}을(를) 물리쳤습니다." if self.boss.is_fainted() else "패배했습니다... 모든 포켓몬이 쓰러졌습니다."
+                        self.visible_logs = [msg]
                     else:
-                        self.current_state = STATE_P1_SELECT
-                    self.cursor_index = 0
-                    self.battle_logs = ["어떤 기술을 사용할까?"]
+                        if self.p1.is_fainted():
+                            self.current_state = STATE_P2_SELECT
+                        else:
+                            self.current_state = STATE_P1_SELECT
+                        self.cursor_index = 0
+                        self.log_queue = ["어떤 기술을 사용할까?"]
+                        self._update_visible_logs()
         
         elif key == arcade.key.ESCAPE:
             arcade.exit()
 
     def start_battle_phase(self):
         self.current_state = STATE_BATTLE_PHASE
-        self.battle_logs.clear()
+        self.visible_logs = []
+        self.log_queue = []
         action_list = []
         
         if not self.p1.is_fainted() and self.p1_selected_move_idx is not None:
@@ -190,11 +198,13 @@ class BattleGame(arcade.Window):
                 action_list.append({"attacker": self.boss, "defender": target, "move": boss_move})
         
         results = self.engine.execute_turn(action_list)
-        # 결과 로그 생성
         for res in results:
-            self.battle_logs.append(res['msg'])
+            self.log_queue.append(res['msg'])
             if res['is_ko']:
-                self.battle_logs.append(f"{res['defender']}은(는) 쓰러졌다!")
+                self.log_queue.append(f"{res['defender']}은(는) 쓰러졌다!")
+        self._update_visible_logs()
+
+def main():
     game = BattleGame()
     arcade.run()
 
