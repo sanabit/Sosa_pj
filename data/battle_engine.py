@@ -42,6 +42,7 @@ class Pokemon:
             "sp_def": 0, 
             "speed": 0
         }  # 랭크업 상태
+        self.is_phase_2 = False # 보스 2페이즈 진입 여부
 
     def _calc_hp(self, base):
         # 본가 HP 계산 공식: ((Base*2 + IV + EV/4) * Level / 100) + Level + 10
@@ -75,7 +76,6 @@ class BattleEngine:
         power = move["power"]
         
         # 랭크 보정치 테이블 (랭크 -6 ~ +6)
-        # 2/8, 2/7, 2/6, 2/5, 2/4, 2/3, 2/2, 3/2, 4/2, 5/2, 6/2, 7/2, 8/2
         rank_mult = {
             -6: 2/8, -5: 2/7, -4: 2/6, -3: 2/5, -2: 2/4, -1: 2/3,
              0: 1.0,
@@ -93,46 +93,82 @@ class BattleEngine:
         # Damage = (((2 * Level / 5 + 2) * Power * A/D) / 50 + 2)
         
         # --- 특성(Ability) 로직 추가 ---
-        
-        # [방어자 특성] 타오르는 불꽃 (Flash Fire): 불꽃 타입 공격 무효화
         if defender.ability == "Flash Fire" and move["type"] == "Fire":
             return 0
             
-        # [공격자 특성] 급류 (Torrent): HP가 1/3 이하일 때 물 타입 위력 1.5배
         current_power = power
         if attacker.ability == "Torrent" and move["type"] == "Water":
             if attacker.hp <= (attacker.max_hp / 3):
                 current_power *= 1.5
         
-        # [공격자 특성] 심록 (Overgrow): HP가 1/3 이하일 때 풀 타입 위력 1.5배
         if attacker.ability == "Overgrow" and move["type"] == "Grass":
             if attacker.hp <= (attacker.max_hp / 3):
                 current_power *= 1.5
         
-        # ----------------------------
-
         base_damage = (((2 * 50 / 5 + 2) * current_power * a_stat / d_stat) / 50) + 2
         
-        # 2. 상성 배율 적용 (types.py 활용)
+        # 2. 상성 배율 적용
         type_mod = get_effectiveness(move["type"], defender.types)
         
-        # 3. 자속 보정 (STAB: Same Type Attack Bonus, 1.5배)
+        # 3. 자속 보정 (STAB: 1.5배)
         stab_mod = 1.5 if move["type"] in attacker.types else 1.0
         
-        # 4. 난수 보정 (Random Roll: 0.85 ~ 1.0)
+        # 4. 난수 보정 (0.85 ~ 1.0)
         random_mod = random.uniform(0.85, 1.0)
         
-        # 모든 보정치를 곱하여 최종 데미지 정수형 반환
         final_damage = int(base_damage * type_mod * stab_mod * random_mod)
         
         return final_damage
 
+    def get_boss_ai_action(self, boss, opponents, turn_count):
+        alive_opponents = [p for p in opponents if not p.is_fainted()]
+        if not alive_opponents or boss.is_fainted():
+            return None
+            
+        if turn_count == 1:
+            return {"attacker": boss, "defender": alive_opponents[0], "move": "Hyper Voice"}
+            
+        best_moves = [] 
+        aoe_moves = []  
+        
+        for move_name in boss.moves:
+            move = MOVES[move_name]
+            if move["target"] == "all_opponents":
+                aoe_moves.append(move_name)
+                
+            for target in alive_opponents:
+                if target.ability == "Flash Fire" and move["type"] == "Fire":
+                    continue
+                effectiveness = get_effectiveness(move["type"], target.types)
+                if effectiveness >= 2.0:
+                    best_moves.append((move_name, target))
+                    
+        if best_moves:
+            chosen_move, chosen_target = random.choice(best_moves)
+            return {"attacker": boss, "defender": chosen_target, "move": chosen_move}
+            
+        valid_aoe = []
+        for move_name in aoe_moves:
+            can_hit_anyone = False
+            move = MOVES[move_name]
+            for target in alive_opponents:
+                eff = get_effectiveness(move["type"], target.types)
+                if target.ability == "Flash Fire" and move["type"] == "Fire":
+                    eff = 0
+                if eff > 0:
+                    can_hit_anyone = True
+                    break
+            if can_hit_anyone:
+                valid_aoe.append(move_name)
+                
+        if valid_aoe:
+            chosen_move = random.choice(valid_aoe)
+            return {"attacker": boss, "defender": alive_opponents[0], "move": chosen_move}
+            
+        chosen_move = random.choice(boss.moves)
+        return {"attacker": boss, "defender": alive_opponents[0], "move": chosen_move}
+
     def execute_turn(self, action_list):
-        """
-        행동 리스트를 받아 우선도와 스피드 순서대로 턴을 처리함
-        action_list 형식: [{'attacker': Pokemon 객체, 'defender': Pokemon 객체, 'move': '기술명'}, ...]
-        """
-        # 1. 모든 참여자 상태 리셋
         participants = set()
         for action in action_list:
             participants.add(action['attacker'])
@@ -143,7 +179,6 @@ class BattleEngine:
             p.is_protecting = False
             p.is_wide_guarding = False
 
-        # 2. 우선도 및 스피드 기준 정렬
         def sort_key(action):
             move_name = action['move']
             priority = MOVES[move_name].get('priority', 0)
@@ -164,7 +199,6 @@ class BattleEngine:
                 
             move = MOVES[move_name]
             
-            # 기술 사용 선언 (로그의 첫 줄)
             results.append({
                 "attacker": attacker.ko_name,
                 "defender": "",
@@ -175,7 +209,6 @@ class BattleEngine:
                 "msg": f"{attacker.ko_name}의 {move['ko']}!"
             })
             
-            # 타겟 수집
             targets = []
             if move["target"] == "all_opponents":
                 for p in participants:
@@ -189,13 +222,12 @@ class BattleEngine:
             elif move["target"] == "all":
                 targets = list(participants)
                 targets.sort(key=lambda x: x.speed, reverse=True)
-            else: # single or others
+            else: 
                 if action.get('defender'):
                     targets = [action['defender']]
                 else:
                     targets = [attacker]
 
-            # 각 타겟에 대해 효과 적용
             for defender in targets:
                 if defender.is_fainted() and move["target"] != "all":
                     continue
@@ -212,7 +244,7 @@ class BattleEngine:
                     if move["category"] == "Status":
                         if move_name == "Protect":
                             attacker.is_protecting = True
-                            msg = f"{attacker.ko_name}은(는) 방어 태세에 들어갔다!"
+                            msg = f"{attacker.ko_name}의 방어! {attacker.ko_name}은(는) 방어 태세에 들어갔다!"
                         elif move_name == "Wide Guard":
                             for p in participants:
                                 if (attacker.name == "Reshiram" and p.name == "Reshiram") or \
@@ -223,7 +255,10 @@ class BattleEngine:
                             for p in participants:
                                 for stat in p.stat_stages:
                                     p.stat_stages[stat] = 0
-                            msg = "필드의 모든 랭크 변화가 초기화되었다!"
+                            if defender == targets[0]:
+                                msg = "필드의 모든 랭크 변화가 초기화되었다!"
+                            else:
+                                continue 
                         elif move_name == "Calm Mind":
                             attacker.stat_stages["sp_atk"] = min(6, attacker.stat_stages["sp_atk"] + 1)
                             attacker.stat_stages["sp_def"] = min(6, attacker.stat_stages["sp_def"] + 1)
@@ -233,16 +268,28 @@ class BattleEngine:
                             attacker.hp = min(attacker.max_hp, attacker.hp + heal_amt)
                             msg = f"{attacker.ko_name}은(는) 체력을 회복했다!"
                     else:
-                        # 공격기
                         if defender.is_protecting:
                             msg = f"{defender.ko_name}은(는) 공격으로부터 몸을 지켰다!"
                         elif move["target"] == "all_opponents" and defender.is_wide_guarding:
                             msg = f"{defender.ko_name}이(가) 와이드가드로 광역 공격을 막아냈다!"
                         else:
                             damage = self.calculate_damage(attacker, defender, move_name)
-                            defender.hp = max(0, defender.hp - damage)
-                            is_ko = defender.is_fainted()
-                            msg = f"{defender.ko_name}에게 {damage}의 데미지!"
+                            if damage == 0:
+                                msg = f"{defender.ko_name}에게는 효과가 없는 것 같다.."
+                            else:
+                                defender.hp = max(0, defender.hp - damage)
+                                if defender.hp == 0 and defender.name == "Reshiram" and not defender.is_phase_2:
+                                    defender.is_phase_2 = True
+                                    defender.hp = defender.max_hp
+                                    for p in participants:
+                                        for stat in p.stat_stages:
+                                            p.stat_stages[stat] = 0
+                                    defender.stat_stages["speed"] = 2
+                                    is_ko = False
+                                    msg = f"{defender.ko_name}에게 {damage}의 데미지!\n레시라무가 에너지를 방출하고 있다!\n모든 랭크 변화가 초기화되고 레시라무의 스피드가 2단계 올랐다!"
+                                else:
+                                    is_ko = defender.is_fainted()
+                                    msg = f"{defender.ko_name}에게 {damage}의 데미지!"
 
                 results.append({
                     "attacker": attacker.ko_name,

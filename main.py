@@ -23,7 +23,7 @@ class BattleGame(arcade.Window):
         self.engine = BattleEngine()
         
         # 포켓몬 객체 생성
-        self.p1 = Pokemon("Primarina")
+        self.p1 = Pokemon("Chandelure")
         self.p2 = Pokemon("Zekrom")
         self.boss = Pokemon("Reshiram")
         
@@ -40,14 +40,17 @@ class BattleGame(arcade.Window):
         self.p2_moves_ko = [MOVES[m]["ko"] for m in self.p2.moves]
 
         # --- 시스템 변수 초기화
-        self.current_state = STATE_P1_SELECT
+        # 처음부터 기술 선택이 아닌, 시작 로그부터 보여주기 위해 BATTLE_PHASE로 시작
+        self.current_state = STATE_BATTLE_PHASE
+        self.turn_count = 1
         self.cursor_index = 0
         self.p1_selected_move_idx = None
         self.p2_selected_move_idx = None
         
         # 화면 하단에 띄울 전투 로그 및 페이지 관리
         self.log_queue = [
-            f"폭주하는 에너지로 모든 능력치가 1단계 증가했다!",
+            f"레시라무가 등장했다!",
+            "레시라무는 폭주하는 에너지로 모든 능력치가 1단계 증가했다!",
             "어떤 기술을 사용할까?"
         ]
         self.visible_logs = []  # 현재 화면에 보이는 최대 2줄
@@ -204,20 +207,22 @@ class BattleGame(arcade.Window):
             move_name = self.p2.moves[self.p2_selected_move_idx]
             action_list.append({"attacker": self.p2, "defender": self.boss, "move": move_name})
             
+        # 보스 AI 로직 적용
         if not self.boss.is_fainted():
-            targets = []
-            if not self.p1.is_fainted(): targets.append(self.p1)
-            if not self.p2.is_fainted(): targets.append(self.p2)
-            if targets:
-                target = random.choice(targets)
-                boss_move = random.choice(self.boss.moves)
-                action_list.append({"attacker": self.boss, "defender": target, "move": boss_move})
+            boss_action = self.engine.get_boss_ai_action(self.boss, [self.p1, self.p2], self.turn_count)
+            if boss_action:
+                action_list.append(boss_action)
         
         results = self.engine.execute_turn(action_list)
         for res in results:
-            self.log_queue.append(res['msg'])
+            # 줄바꿈 문자(\n)가 포함된 각성 이벤트 메시지 등 처리
+            for line in res['msg'].split('\n'):
+                if line:
+                    self.log_queue.append(line)
             if res['is_ko']:
                 self.log_queue.append(f"{res['defender']}은(는) 쓰러졌다!")
+        
+        self.turn_count += 1
         self._update_visible_logs()
 
 def main():
