@@ -6,7 +6,7 @@ from data.moves import MOVES
 # --- 화면 설정 ---
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-SCREEN_TITLE = "이상과 진실"
+SCREEN_TITLE = "폭주! 레시라무"
 
 # --- 상태(State) 상수 ---
 STATE_P1_SELECT = 1     # 1번 포켓몬 기술 선택 중
@@ -17,28 +17,31 @@ STATE_GAME_OVER = 4     # 전투 종료
 class BattleGame(arcade.Window):
     def __init__(self):
         super().__init__(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_TITLE)
-        arcade.set_background_color(arcade.color.BLACK)
+        arcade.set_background_color(arcade.color.BLACK) #나중에 수정해야댐
 
         # --- 데이터 엔진 및 객체 초기화 ---
         self.engine = BattleEngine()
         
         # 포켓몬 객체 생성 (Primarina: 누리레느, Zekrom: 제크로무, Reshiram: 레시라무)
         # 샹델라와 이상해꽃도 대기 멤버로 고려 가능하지만, 현재는 2인 배틀이므로 p1, p2를 설정
-        self.p1 = Pokemon("Primarina")
+        self.p1 = Pokemon("Primarina") # 값 수정하기
         self.p2 = Pokemon("Zekrom") # 샹델라 대신 제크로무로 변경 가능
         self.boss = Pokemon("Reshiram")
 
         # 기술 목록 (한글 표시용)
         self.p1_moves_ko = [MOVES[m]["ko"] for m in self.p1.moves]
         self.p2_moves_ko = [MOVES[m]["ko"] for m in self.p2.moves]
+        # 시작할 때 기술 목록 보여주는 것
 
-        # --- 시스템 변수 ---
+        # --- 시스템 변수 초기화
         self.current_state = STATE_P1_SELECT
         self.cursor_index = 0
         self.p1_selected_move_idx = None
         self.p2_selected_move_idx = None
         
         self.battle_logs = [f"야생의 {self.boss.ko_name}이(가) 나타났다!", "어떤 기술을 사용할까?"]
+        # 야생 아님. 시작 로그 추가해야함
+
 
         # --- 성능 최적화를 위한 Text 객체 관리 (자주 변하지 않는 텍스트) ---
         self.boss_label = arcade.Text("", 400, 540, arcade.color.WHITE, 16, bold=True, anchor_x="center")
@@ -53,10 +56,10 @@ class BattleGame(arcade.Window):
 
     def on_draw(self):
         """화면에 도형과 텍스트를 그리는 메서드 (눈)"""
-        # [수정] start_render() 대신 self.clear() 사용
+        # [수정] start_render() 대신 self.clear() 사용 최신문법
         self.clear()
 
-        # 1. 보스 (제크로무)
+        # 1. 보스 (레시라무)
         arcade.draw_rect_filled(arcade.XYWH(400, 450, 150, 150), arcade.color.DARK_RED)
         self.boss_label.text = f"{self.boss.ko_name} HP: {self.boss.hp}/{self.boss.max_hp}"
         self.boss_label.draw()
@@ -187,19 +190,11 @@ class BattleGame(arcade.Window):
                 action_list.append({"attacker": self.boss, "defender": target, "move": boss_move})
         
         results = self.engine.execute_turn(action_list)
+        # 결과 로그 생성
         for res in results:
-            msg = f"{res['attacker']}의 {res['move']}!"
-            if not res['is_hit']:
-                msg += " 그러나 빗나갔다!"
-            elif res['damage'] == 0:
-                msg += " 효과가 없는 것 같다..."
-            else:
-                msg += f" {res['damage']}의 데미지!"
-            self.battle_logs.append(msg)
+            self.battle_logs.append(res['msg'])
             if res['is_ko']:
                 self.battle_logs.append(f"{res['defender']}은(는) 쓰러졌다!")
-
-def main():
     game = BattleGame()
     arcade.run()
 

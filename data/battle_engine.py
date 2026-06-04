@@ -33,6 +33,17 @@ class Pokemon:
         self.sp_def = self._calc_stat(self.base_stats["sp_def"])
         self.speed = self._calc_stat(self.base_stats["speed"])
 
+        # 상태 변수 (전투 중 관리)
+        self.is_protecting = False  # 방어 상태
+        self.is_wide_guarding = False  # 와이드가드 상태
+        self.stat_stages = {
+            "attack": 0, 
+            "defense": 0, 
+            "sp_atk": 0, 
+            "sp_def": 0, 
+            "speed": 0
+        }  # 랭크업 상태
+
     def _calc_hp(self, base):
         # 본가 HP 계산 공식: ((Base*2 + IV + EV/4) * Level / 100) + Level + 10
         return int((base * 2 + 31) * self.level / 100 + self.level + 10)
@@ -116,10 +127,20 @@ class BattleEngine:
         행동 리스트를 받아 스피드 순서대로 턴을 처리함
         action_list 형식: [{'attacker': Pokemon 객체, 'defender': Pokemon 객체, 'move': '기술명'}, ...]
         """
-        # 1. 스피드 스탯 기준 내림차순 정렬
+        # 1. 턴 시작 시 모든 포켓몬의 방어 상태 초기화
+        all_pokemon = set()
+        for action in action_list:
+            all_pokemon.add(action['attacker'])
+            all_pokemon.add(action['defender'])
+        
+        for p in all_pokemon:
+            p.is_protecting = False
+            p.is_wide_guarding = False
+
+        # 2. 스피드 스탯 기준 내림차순 정렬 (우선도 로직은 단순화를 위해 스피드만 고려)
         sorted_actions = sorted(action_list, key=lambda x: x['attacker'].speed, reverse=True)
         
-        # 2. 순서대로 처리하기 위한 큐(Queue) 생성
+        # 3. 순서대로 처리하기 위한 큐(Queue) 생성
         action_queue = deque(sorted_actions)
         
         results = []
@@ -127,65 +148,94 @@ class BattleEngine:
         while action_queue:
             action = action_queue.popleft()
             attacker = action['attacker']
-            defender = action['defender']
             move_name = action['move']
             
-            # 공격자가 이미 쓰러진 상태라면 행동 스킵
             if attacker.is_fainted():
                 continue
+                
+            move = MOVES[move_name]
             
-            # 1. 명중률 계산
-            accuracy = MOVES[move_name]["accuracy"]
-            is_hit = random.randint(1, 100) <= accuracy
-            
-            hit_text = ""
-            if is_hit:
-                # 데미지 계산 및 반영
-                damage = self.calculate_damage(attacker, defender, move_name)
-                defender.hp = max(0, defender.hp - damage)
-            else:
+            # 타겟 결정 로직
+            targets = []
+            if move["target"] == "all_opponents":
+                # 공격자의 반대 진영 수집 (단순화를 위해 action_list의 다른 참여자 중 defender 측 탐색)
+                # 여기서는 action['defender']가 포함된 진영의 모든 생존자를 타겟으로 함
+                # 실제 로직에서는 진영 구분이 필요하지만, 현재 2대1 구조에 맞춰 구현
+                for p in all_pokemon:
+                    if p != attacker and not p.is_fainted():
+                        # 보스가 공격자면 플레이어들, 플레이어가 공격자면 보스
+                        if (attacker.name == "Reshiram" and p.name != "Reshiram") or \
+                           (attacker.name != "Reshiram" and p.name == "Reshiram"):
+                            targets.append(p)
+            elif move["target"] == "self":
+                targets = [attacker]
+            elif move["target"] == "all":
+                targets = list(all_pokemon)
+            else: # single or others
+                targets = [action['defender']]
+
+            for defender in targets:
+                if defender.is_fainted() and move["target"] != "all":
+                    continue
+
+                # 1. 명중률 계산
+                accuracy = move["accuracy"]
+                is_hit = random.randint(1, 100) <= accuracy
+                
                 damage = 0
-                hit_text = f"{defender.ko_name}에게는 맞지 않았다 !"
-            
-            # 결과 저장 (이후 GUI 피드백용)
-            turn_info = {
-                "attacker": attacker.ko_name,
-                "defender": defender.ko_name,
-                "move": MOVES[move_name]["ko"],
-                "damage": damage,
-                "is_hit": is_hit,
-                "is_ko": defender.is_fainted()
-            }
-            results.append(turn_info)
-            
-            # 테스트를 위한 로그 출력 (추후 Arcade 연동 시 제거 가능)
-            print(f"[전투] {attacker.ko_name}의 {MOVES[move_name]['ko']}!")
-            if not is_hit:
-                print(hit_text)
-                
-            if is_hit and damage == 0 and MOVES[move_name]["category"] != "Status":
-                print(f" -> 효과가 없는 것 같다...")
-                
-            if defender.is_fainted():
-                print(f" -> {defender.ko_name}은(는) 쓰러졌다!")
+                msg = ""
+                is_ko = False
+
+                if not is_hit:
+                    msg = f"{defender.ko_name}에게는 맞지 않았다!"
+                else:
+                    # 기술 카테고리에 따른 분기
+                    if move["category"] == "Status":
+                        if move_name == "Protect":
+                            attacker.is_protecting = True
+                            msg = f"{attacker.ko_name}은(는) 방어 태세에 들어갔다!"
+                        elif move_name == "Wide Guard":
+                            # 사용자 및 같은 진영 아군 보호
+                            for p in all_pokemon:
+                                if (attacker.name == "Reshiram" and p.name == "Reshiram") or \
+                                   (attacker.name != "Reshiram" and p.name != "Reshiram"):
+                                    p.is_wide_guarding = True
+                            msg = f"{attacker.ko_name} 측이 광역 공격으로부터 보호받는다!"
+                        elif move_name == "Haze":
+                            for p in all_pokemon:
+                                for stat in p.stat_stages:
+                                    p.stat_stages[stat] = 0
+                            msg = "필드의 모든 랭크 변화가 초기화되었다!"
+                        elif move_name == "Calm Mind":
+                            attacker.stat_stages["sp_atk"] = min(6, attacker.stat_stages["sp_atk"] + 1)
+                            attacker.stat_stages["sp_def"] = min(6, attacker.stat_stages["sp_def"] + 1)
+                            msg = f"{attacker.ko_name}의 특공과 특방이 올랐다!"
+                        elif move_name == "Synthesis":
+                            heal_amt = int(attacker.max_hp * 0.5)
+                            attacker.hp = min(attacker.max_hp, attacker.hp + heal_amt)
+                            msg = f"{attacker.ko_name}은(는) 체력을 회복했다!"
+                    else:
+                        # 공격기 (Physical/Special)
+                        # 방어벽 체크
+                        if defender.is_protecting:
+                            msg = f"{defender.ko_name}이(가) 방어로 공격을 막아냈다!"
+                        elif move["target"] == "all_opponents" and defender.is_wide_guarding:
+                            msg = f"{defender.ko_name}이(가) 와이드가드로 광역 공격을 막아냈다!"
+                        else:
+                            damage = self.calculate_damage(attacker, defender, move_name)
+                            defender.hp = max(0, defender.hp - damage)
+                            is_ko = defender.is_fainted()
+                            msg = f"{attacker.ko_name}의 {move['ko']}!"
+
+                turn_info = {
+                    "attacker": attacker.ko_name,
+                    "defender": defender.ko_name,
+                    "move": move["ko"],
+                    "damage": damage,
+                    "is_hit": is_hit,
+                    "is_ko": is_ko,
+                    "msg": msg
+                }
+                results.append(turn_info)
         
         return results
-
-# 샘플 실행 테스트 코드
-if __name__ == "__main__":
-    # 데이터 로드 확인 및 객체 생성
-    p1 = Pokemon("Primarina")
-    p2 = Pokemon("Venusaur")
-    boss = Pokemon("Zekrom")
-    
-    engine = BattleEngine()
-    
-    # 턴 행동 정의
-    sample_actions = [
-        {"attacker": p1, "defender": boss, "move": "Moonblast"},
-        {"attacker": p2, "defender": boss, "move": "Sludge Bomb"},
-        {"attacker": boss, "defender": p1, "move": "Fusion Bolt"}
-    ]
-    
-    print("배틀 시뮬레이션 시작!")
-    engine.execute_turn(sample_actions)
