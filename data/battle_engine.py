@@ -69,19 +69,25 @@ class BattleEngine:
             
         move = MOVES[move_name]
         
-        # 변화 기술(Status)은 데미지 계산 제외
         if move["category"] == "Status":
             return 0
             
         power = move["power"]
         
-        # 공격/방어 유형에 따른 스탯 선택 (Physical vs Special)
+        # 랭크 보정치 테이블 (랭크 -6 ~ +6)
+        # 2/8, 2/7, 2/6, 2/5, 2/4, 2/3, 2/2, 3/2, 4/2, 5/2, 6/2, 7/2, 8/2
+        rank_mult = {
+            -6: 2/8, -5: 2/7, -4: 2/6, -3: 2/5, -2: 2/4, -1: 2/3,
+             0: 1.0,
+             1: 1.5, 2: 2.0, 3: 2.5, 4: 3.0, 5: 3.5, 6: 4.0
+        }
+        
         if move["category"] == "Physical":
-            a_stat = attacker.attack
-            d_stat = defender.defense
+            a_stat = attacker.attack * rank_mult.get(attacker.stat_stages["attack"], 1.0)
+            d_stat = defender.defense * rank_mult.get(defender.stat_stages["defense"], 1.0)
         else: # Special
-            a_stat = attacker.sp_atk
-            d_stat = defender.sp_def
+            a_stat = attacker.sp_atk * rank_mult.get(attacker.stat_stages["sp_atk"], 1.0)
+            d_stat = defender.sp_def * rank_mult.get(defender.stat_stages["sp_def"], 1.0)
             
         # 1. 기초 데미지 공식 (Level 50 고정)
         # Damage = (((2 * Level / 5 + 2) * Power * A/D) / 50 + 2)

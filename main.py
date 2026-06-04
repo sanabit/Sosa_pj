@@ -26,6 +26,14 @@ class BattleGame(arcade.Window):
         self.p1 = Pokemon("Primarina")
         self.p2 = Pokemon("Zekrom")
         self.boss = Pokemon("Reshiram")
+        
+        # 보스 체력 2배 강화
+        self.boss.max_hp *= 2
+        self.boss.hp = self.boss.max_hp
+        
+        # 보스 초기 능력치 1단계 상승 (폭주 에너지)
+        for stat in self.boss.stat_stages:
+            self.boss.stat_stages[stat] = 1
 
         # 기술 목록 (한글 표시용)
         self.p1_moves_ko = [MOVES[m]["ko"] for m in self.p1.moves]
@@ -38,7 +46,10 @@ class BattleGame(arcade.Window):
         self.p2_selected_move_idx = None
         
         # 화면 하단에 띄울 전투 로그 및 페이지 관리
-        self.log_queue = [f"야생의 {self.boss.ko_name}이(가) 나타났다!", "어떤 기술을 사용할까?"]
+        self.log_queue = [
+            f"폭주하는 에너지로 모든 능력치가 1단계 증가했다!",
+            "어떤 기술을 사용할까?"
+        ]
         self.visible_logs = []  # 현재 화면에 보이는 최대 2줄
         self._update_visible_logs()
 
