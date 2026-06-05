@@ -56,6 +56,13 @@ class Pokemon:
         return self.hp <= 0
     #기절했니? 라는 뜻
 
+# 업적 데이터 (전역 관리)
+ACHIEVEMENTS = {
+    "zekrom_finish": False,
+    "wide_guard_block": False,
+    "haze_reset": False
+}
+
 class BattleEngine:
     """
     데미지 계산 및 턴 순서 처리를 담당하는 핵심 전투 엔진
@@ -298,7 +305,18 @@ class BattleEngine:
                                         p.is_wide_guarding = True
                             msg = f"{attacker.ko_name} 측이 광역 공격으로부터 보호받는다!"
                         elif move_name == "Haze":
-                            # (기존 로직)
+                            # 초기화 감지 업적
+                            boss_reshiram = None
+                            for m_act in move_actions:
+                                if m_act["attacker"].name == "Reshiram":
+                                    boss_reshiram = m_act["attacker"]
+                                    break
+                            
+                            if boss_reshiram:
+                                has_stats = any(v > 0 for v in boss_reshiram.stat_stages.values())
+                                if has_stats:
+                                    ACHIEVEMENTS["haze_reset"] = True
+                            
                             msg = "필드의 모든 랭크 변화가 초기화되었다!"
                         elif move_name == "Calm Mind":
                             attacker.stat_stages["sp_atk"] = min(6, attacker.stat_stages["sp_atk"] + 1)
@@ -312,6 +330,8 @@ class BattleEngine:
                         if defender.is_protecting:
                             msg = f"{defender.ko_name}은(는) 공격으로부터 몸을 지켰다!"
                         elif move["target"] == "all_opponents" and defender.is_wide_guarding:
+                            # 방어 감지 업적
+                            ACHIEVEMENTS["wide_guard_block"] = True
                             msg = f"{defender.ko_name}이(가) 와이드가드로 광역 공격을 막아냈다!"
                         else:
                             damage = self.calculate_damage(attacker, defender, move_name)
@@ -328,6 +348,9 @@ class BattleEngine:
                                     msg = f"{defender.ko_name}에게 {damage}의 데미지!\n레시라무가 에너지를 방출하고 있다!\n레시라무의 모든 상처가 치유되고 스피드가 2단계 올랐다!"
                                 else:
                                     is_ko = defender.is_fainted()
+                                    # 막타 감지 업적
+                                    if is_ko and defender.name == "Reshiram" and attacker.name == "Zekrom":
+                                        ACHIEVEMENTS["zekrom_finish"] = True
                                     msg = f"{defender.ko_name}에게 {damage}의 데미지!"
 
                 results.append({
