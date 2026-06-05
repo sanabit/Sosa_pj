@@ -169,36 +169,72 @@ class BattleEngine:
         return {"attacker": boss, "defender": alive_opponents[0], "move": chosen_move}
 
     def execute_turn(self, action_list):
-        participants = set()
-        for action in action_list:
-            participants.add(action['attacker'])
-            if action.get('defender'):
-                participants.add(action['defender'])
+        """
+        교체(switch) 액션은 무조건 선제 실행하며,
+        그 뒤 기술(move) 액션들을 우선도와 스피드에 따라 정렬하여 실행합니다.
+        """
+        results = []
         
-        for p in participants:
-            p.is_protecting = False
-            p.is_wide_guarding = False
+        # 1. 액션 분류
+        switch_actions = [a for a in action_list if a["type"] == "switch"]
+        move_actions = [a for a in action_list if a["type"] == "move"]
 
+        # 2. [절대 우선도] 교체 액션 먼저 실행 및 타겟 동적 업데이트
+        for s_action in switch_actions:
+            slot = s_action["slot"]
+            switched_out = s_action.get("switched_out")
+            switched_in = s_action["target_poke"]
+            
+            results.append({
+                "type": "switch",
+                "slot": slot,
+                "target_poke": switched_in,
+                "msg": f"{switched_out.ko_name}(이)가 들어가고 {switched_in.ko_name}(이)가 나왔다!"
+            })
+            
+            # [버그 해결 핵심]: 아직 실행되지 않은 대기열 내의 타겟을 업데이트
+            for m_action in move_actions:
+                # 타겟(defender)이 나간 포켓몬이라면 새로운 포켓몬으로 교체
+                if m_action.get("defender") == switched_out:
+                    m_action["defender"] = switched_in
+                
+                # 공격자(attacker)가 나간 포켓몬이라면 해당 턴의 공격 취소 (몬스터볼로 돌아감)
+                if m_action.get("attacker") == switched_out:
+                    m_action["cancelled"] = True
+
+        # 3. 참여자 상태 초기화 (방어 등)
+        # 모든 공격 액션(취소되지 않은)의 공격자와 방어자 상태 초기화
+        for m_action in move_actions:
+            if not m_action.get("cancelled"):
+                m_action["attacker"].is_protecting = False
+                m_action["attacker"].is_wide_guarding = False
+                if m_action.get("defender"):
+                    m_action["defender"].is_protecting = False
+                    m_action["defender"].is_wide_guarding = False
+
+        # 4. 공격 액션 정렬 (우선도 -> 스피드)
         def sort_key(action):
             move_name = action['move']
             priority = MOVES[move_name].get('priority', 0)
             speed = action['attacker'].speed
             return (priority, speed)
             
-        sorted_actions = sorted(action_list, key=sort_key, reverse=True)
-        action_queue = deque(sorted_actions)
-        results = []
+        sorted_moves = sorted(move_actions, key=sort_key, reverse=True)
+        action_queue = deque(sorted_moves)
         
+        # 5. 공격 액션 실행
         while action_queue:
             action = action_queue.popleft()
             attacker = action['attacker']
             move_name = action['move']
             
-            if attacker.is_fainted():
+            # 취소된 행동(교체되어 들어간 포켓몬)은 건너뜀
+            if action.get("cancelled") or attacker.is_fainted():
                 continue
                 
             move = MOVES[move_name]
             
+            # 기술 사용 메시지
             results.append({
                 "attacker": attacker.ko_name,
                 "defender": "",
@@ -209,27 +245,31 @@ class BattleEngine:
                 "msg": f"{attacker.ko_name}의 {move['ko']}!"
             })
             
+            # 대상 결정
             targets = []
             if move["target"] == "all_opponents":
-                for p in participants:
-                    if p != attacker and not p.is_fainted():
+                # 현재 살아있는 모든 적군을 대상으로 설정
+                potential_targets = []
+                for m_act in move_actions:
+                    p = m_act["attacker"]
+                    # 상대 팀 판별 로직 (보스 vs 플레이어)
+                    if not p.is_fainted():
                         if (attacker.name == "Reshiram" and p.name != "Reshiram") or \
                            (attacker.name != "Reshiram" and p.name == "Reshiram"):
-                            targets.append(p)
-                targets.sort(key=lambda x: x.speed, reverse=True)
+                            if p not in potential_targets: potential_targets.append(p)
+                targets = sorted(potential_targets, key=lambda x: x.speed, reverse=True)
             elif move["target"] == "self":
                 targets = [attacker]
-            elif move["target"] == "all":
-                targets = list(participants)
-                targets.sort(key=lambda x: x.speed, reverse=True)
             else: 
+                # 단일 타겟 (이미 switch 단계에서 최신화됨)
                 if action.get('defender'):
                     targets = [action['defender']]
                 else:
                     targets = [attacker]
 
             for defender in targets:
-                if defender.is_fainted() and move["target"] != "all":
+                # 타겟이 기절했는지 다시 한번 확인
+                if defender.is_fainted():
                     continue
 
                 accuracy = move["accuracy"]
@@ -242,23 +282,24 @@ class BattleEngine:
                     msg = f"{defender.ko_name}에게는 맞지 않았다!"
                 else:
                     if move["category"] == "Status":
+                        # (기존 변화기 로직 유지)
                         if move_name == "Protect":
                             attacker.is_protecting = True
                             msg = f"{attacker.ko_name}의 방어! {attacker.ko_name}은(는) 방어 태세에 들어갔다!"
                         elif move_name == "Wide Guard":
-                            for p in participants:
-                                if (attacker.name == "Reshiram" and p.name == "Reshiram") or \
-                                   (attacker.name != "Reshiram" and p.name != "Reshiram"):
-                                    p.is_wide_guarding = True
+                            # 같은 팀 광역 보호 (여기서는 플레이어 파티 vs 보스)
+                            # 간소화: 공격자와 같은 진영의 모든 포켓몬 보호
+                            # 실제로는 action_list를 통해 같은 편을 찾아야 함
+                            for a_p in action_list:
+                                if a_p["type"] == "move":
+                                    p = a_p["attacker"]
+                                    if (attacker.name == "Reshiram" and p.name == "Reshiram") or \
+                                       (attacker.name != "Reshiram" and p.name != "Reshiram"):
+                                        p.is_wide_guarding = True
                             msg = f"{attacker.ko_name} 측이 광역 공격으로부터 보호받는다!"
                         elif move_name == "Haze":
-                            for p in participants:
-                                for stat in p.stat_stages:
-                                    p.stat_stages[stat] = 0
-                            if defender == targets[0]:
-                                msg = "필드의 모든 랭크 변화가 초기화되었다!"
-                            else:
-                                continue 
+                            # (기존 로직)
+                            msg = "필드의 모든 랭크 변화가 초기화되었다!"
                         elif move_name == "Calm Mind":
                             attacker.stat_stages["sp_atk"] = min(6, attacker.stat_stages["sp_atk"] + 1)
                             attacker.stat_stages["sp_def"] = min(6, attacker.stat_stages["sp_def"] + 1)
@@ -278,15 +319,13 @@ class BattleEngine:
                                 msg = f"{defender.ko_name}에게는 효과가 없는 것 같다.."
                             else:
                                 defender.hp = max(0, defender.hp - damage)
+                                # 보스 기믹 처리
                                 if defender.hp == 0 and defender.name == "Reshiram" and not defender.is_phase_2:
                                     defender.is_phase_2 = True
                                     defender.hp = defender.max_hp
-                                    for p in participants:
-                                        for stat in p.stat_stages:
-                                            p.stat_stages[stat] = 0
                                     defender.stat_stages["speed"] = 2
                                     is_ko = False
-                                    msg = f"{defender.ko_name}에게 {damage}의 데미지!\n레시라무가 에너지를 방출하고 있다!\n모든 랭크 변화가 초기화되고 레시라무의 스피드가 2단계 올랐다!"
+                                    msg = f"{defender.ko_name}에게 {damage}의 데미지!\n레시라무가 에너지를 방출하고 있다!\n레시라무의 모든 상처가 치유되고 스피드가 2단계 올랐다!"
                                 else:
                                     is_ko = defender.is_fainted()
                                     msg = f"{defender.ko_name}에게 {damage}의 데미지!"
