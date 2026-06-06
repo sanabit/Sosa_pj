@@ -217,12 +217,12 @@ class BattleView(arcade.View):
             bar_x = x + 65
             bar_y = y - 15
             label_x = x - 110
-            label_y = y 
+            label_y = y +10
             current_label = self.p1_label if poke == self.active_p1 else self.p2_label
             
             # HP 수치 텍스트 (아군만 표시)
             hp_text = f"{poke.hp} / {poke.max_hp}"
-            arcade.draw_text(hp_text, x + 60, y - 25, arcade.color.BLACK, 12, bold=True, anchor_x="right")
+            arcade.draw_text(hp_text, x - 35, y - 14, arcade.color.BLACK, 12, bold=True, anchor_x="right")
 
         # 게이지 배경 (회색)
         arcade.draw_rect_filled(arcade.XYWH(bar_x, bar_y, full_bar_width, bar_height), arcade.color.DARK_GRAY)
