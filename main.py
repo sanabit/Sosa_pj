@@ -20,15 +20,20 @@ STATE_GAME_OVER = 8
 STATE_FAINT_SWITCH = 9
 
 class StoryView(arcade.View):
+    def __init__(self):
+        super().__init__()
+        self.text1 = arcade.Text("테스트 진행중, 123, 456,", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 50,
+                                 arcade.color.WHITE, font_size=20, anchor_x="center")
+        self.text2 = arcade.Text("아무 키나 눌러 시작하세요...", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 50,
+                                 arcade.color.GRAY, font_size=16, anchor_x="center")
+
     def on_show_view(self):
         arcade.set_background_color(arcade.color.BLACK)
 
     def on_draw(self):
         self.clear()
-        arcade.draw_text("테스트 진행중, 123, 456,", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 50,
-                         arcade.color.WHITE, font_size=20, anchor_x="center")
-        arcade.draw_text("아무 키나 눌러 시작하세요...", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 50,
-                         arcade.color.GRAY, font_size=16, anchor_x="center")
+        self.text1.draw()
+        self.text2.draw()
 
     def on_key_press(self, key, _modifiers):
         self.window.show_view(TitleView())
@@ -38,20 +43,25 @@ class TitleView(arcade.View):
         super().__init__()
         self.menu_index = 0
         self.menu_options = ["1. 게임 시작", "2. 업적", "3. 게임 종료"]
+        self.title_text = arcade.Text(SCREEN_TITLE, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 150,
+                                      arcade.color.WHITE, font_size=40, anchor_x="center", bold=True)
+        self.option_texts = [arcade.Text("", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - (i * 60),
+                                        arcade.color.WHITE, font_size=24, anchor_x="center")
+                             for i in range(len(self.menu_options))]
 
     def on_show_view(self):
         arcade.set_background_color(arcade.color.DARK_BLUE_GRAY)
 
     def on_draw(self):
         self.clear()
-        arcade.draw_text(SCREEN_TITLE, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 150,
-                         arcade.color.WHITE, font_size=40, anchor_x="center", bold=True)
+        self.title_text.draw()
         
         for i, option in enumerate(self.menu_options):
-            color = arcade.color.YELLOW if i == self.menu_index else arcade.color.WHITE
+            t = self.option_texts[i]
+            t.color = arcade.color.YELLOW if i == self.menu_index else arcade.color.WHITE
             prefix = "▶ " if i == self.menu_index else "  "
-            arcade.draw_text(f"{prefix}{option}", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - (i * 60),
-                             color, font_size=24, anchor_x="center")
+            t.text = f"{prefix}{option}"
+            t.draw()
 
     def on_key_press(self, key, _modifiers):
         if key == arcade.key.UP:
@@ -69,29 +79,37 @@ class TitleView(arcade.View):
             self.window.close()
 
 class AchievementView(arcade.View):
+    def __init__(self):
+        super().__init__()
+        self.title_text = arcade.Text("업적 리스트", SCREEN_WIDTH / 2, SCREEN_HEIGHT - 100,
+                                      arcade.color.WHITE, font_size=30, anchor_x="center", bold=True)
+        self.achievement_info = [
+            ("zekrom_finish", "제크로무로 마지막 일격 가하기"),
+            ("wide_guard_block", "와이드가드로 광역 공격 막기"),
+            ("haze_reset", "흑안개로 레시라무 능력치 초기화")
+        ]
+        self.achievement_texts = [arcade.Text("", 100, SCREEN_HEIGHT - 200 - (i * 50), 
+                                              arcade.color.WHITE, font_size=20)
+                                  for i in range(len(self.achievement_info))]
+        self.back_text = arcade.Text("'B' 키를 눌러 타이틀로 돌아가기", SCREEN_WIDTH / 2, 100,
+                                     arcade.color.GRAY, font_size=16, anchor_x="center")
+
     def on_show_view(self):
         arcade.set_background_color(arcade.color.BLACK)
 
     def on_draw(self):
         self.clear()
-        arcade.draw_text("업적 리스트", SCREEN_WIDTH / 2, SCREEN_HEIGHT - 100,
-                         arcade.color.WHITE, font_size=30, anchor_x="center", bold=True)
+        self.title_text.draw()
         
-        y_pos = SCREEN_HEIGHT - 200
-        achievement_info = [
-            ("zekrom_finish", "제크로무로 마지막 일격 가하기"),
-            ("wide_guard_block", "와이드가드로 광역 공격 막기"),
-            ("haze_reset", "흑안개로 레시라무 능력치 초기화")
-        ]
-        
-        for key, desc in achievement_info:
+        for i, (key, desc) in enumerate(self.achievement_info):
             status = "완료" if ACHIEVEMENTS[key] else "미완료"
             color = arcade.color.GREEN if ACHIEVEMENTS[key] else arcade.color.RED
-            arcade.draw_text(f"{desc}: {status}", 100, y_pos, color, font_size=20)
-            y_pos -= 50
+            t = self.achievement_texts[i]
+            t.text = f"{desc}: {status}"
+            t.color = color
+            t.draw()
 
-        arcade.draw_text("'B' 키를 눌러 타이틀로 돌아가기", SCREEN_WIDTH / 2, 100,
-                         arcade.color.GRAY, font_size=16, anchor_x="center")
+        self.back_text.draw()
 
     def on_key_press(self, key, _modifiers):
         if key == arcade.key.B:
@@ -102,6 +120,11 @@ class BattleView(arcade.View):
         super().__init__()
         # --- 데이터 엔진 및 객체 초기화 ---
         self.engine = BattleEngine()
+        
+        # UI 이미지 로드
+        self.tex_hp_enemy = arcade.load_texture("ui/hp_left.png")   # 적군용 프레임
+        self.tex_hp_player = arcade.load_texture("ui/hp_right.png") # 아군용 프레임
+        self.tex_layer = arcade.load_texture("ui/layer.png")       # HP 게이지용
         
         # 1. 파티 데이터 구조화
         self.player_party = [
@@ -138,10 +161,11 @@ class BattleView(arcade.View):
         self.visible_logs = []
         self._update_visible_logs()
 
-        # UI Text 객체 관리
-        self.boss_label = arcade.Text("", 400, 540, arcade.color.WHITE, 16, bold=True, anchor_x="center")
-        self.p1_label = arcade.Text("", 200, 310, arcade.color.WHITE, 14, align="center", anchor_x="center", multiline=True, width=200)
-        self.p2_label = arcade.Text("", 600, 310, arcade.color.WHITE, 14, align="center", anchor_x="center", multiline=True, width=200)
+        # UI Text 객체 관리 (위치는 on_draw에서 매 프레임 업데이트됨)
+        self.boss_label = arcade.Text("", 0, 0, arcade.color.BLACK, 14, bold=True)
+        self.p1_label = arcade.Text("", 0, 0, arcade.color.BLACK, 14, bold=True)
+        self.p2_label = arcade.Text("", 0, 0, arcade.color.BLACK, 14, bold=True)
+        
         self.log_texts = [arcade.Text("", 30, 110 - (i * 40), arcade.color.WHITE, 16) for i in range(2)]
         self.menu_title = arcade.Text("", 30, 120, arcade.color.YELLOW, 16, bold=True)
         self.undo_hint = arcade.Text("(B 키를 누르면 이전 단계/포켓몬 취소)", 250, 120, arcade.color.GRAY, 12)
@@ -152,7 +176,6 @@ class BattleView(arcade.View):
         self.warning_text = arcade.Text("", 400, 300, arcade.color.RED, 20, bold=True, anchor_x="center")
         self.warning_timer = 0
         
-        # 업적 알림용
         self.achievement_notified = False
 
     def _update_visible_logs(self):
@@ -164,23 +187,92 @@ class BattleView(arcade.View):
     def on_show_view(self):
         arcade.set_background_color(arcade.color.BLACK)
 
+    def draw_hp_ui(self, x, y, poke, is_enemy=False):
+        """본가 스타일의 HP UI 프레임과 게이지를 그립니다."""
+        # 요청에 따라 적군(보스)과 아군의 프레임 이미지를 서로 바꿈
+        # 이전에 보스는 hp_left, 아군은 hp_right를 썼으나 이제 반대로 적용
+        texture = self.tex_hp_player if is_enemy else self.tex_hp_enemy
+        
+        # 화면 끝에 맞추기 위한 위치 보정 (중심 좌표 기준)
+        render_width = texture.width * 1.2
+        render_height = texture.height * 1.2
+        
+        arcade.draw_texture_rect(texture, arcade.XYWH(x, y, render_width, render_height))
+        
+        # 체력바 오프셋
+        hp_ratio = max(0, min(poke.hp / poke.max_hp, 1))
+        full_bar_width = 115
+        bar_height = 8
+        
+        # 프레임이 바뀌었으므로 오프셋 로직도 서로 교차하여 적용
+        if is_enemy:
+            # 보스가 아군용 프레임(hp_right)의 오프셋을 사용하도록 수정
+            bar_x = x + 43
+            bar_y = y - 15
+            label_x = x - 130
+            label_y = y + 5
+            current_label = self.boss_label
+        else:
+            # 아군이 적군용 프레임(hp_left)의 오프셋을 사용하도록 수정
+            bar_x = x + 65
+            bar_y = y - 15
+            label_x = x - 110
+            label_y = y 
+            current_label = self.p1_label if poke == self.active_p1 else self.p2_label
+            
+            # HP 수치 텍스트 (아군만 표시)
+            hp_text = f"{poke.hp} / {poke.max_hp}"
+            arcade.draw_text(hp_text, x + 60, y - 25, arcade.color.BLACK, 12, bold=True, anchor_x="right")
+
+        # 게이지 배경 (회색)
+        arcade.draw_rect_filled(arcade.XYWH(bar_x, bar_y, full_bar_width, bar_height), arcade.color.DARK_GRAY)
+        
+        # 게이지 색상 레이어
+        if hp_ratio > 0.5: color = arcade.color.GREEN
+        elif hp_ratio > 0.2: color = arcade.color.YELLOW
+        else: color = arcade.color.RED
+        
+        current_bar_width = full_bar_width * hp_ratio
+        if current_bar_width > 0:
+            actual_bar_x = (bar_x - full_bar_width / 2) + (current_bar_width / 2)
+            arcade.draw_rect_filled(arcade.XYWH(actual_bar_x, bar_y, current_bar_width, bar_height), color)
+
+        # 이름 출력
+        current_label.text = poke.ko_name
+        current_label.x = label_x
+        current_label.y = label_y
+        current_label.draw()
+
     def on_draw(self):
         self.clear()
 
-        arcade.draw_rect_filled(arcade.XYWH(400, 450, 150, 150), arcade.color.DARK_RED)
-        self.boss_label.text = f"{self.boss.ko_name} HP: {self.boss.hp}/{self.boss.max_hp}"
-        self.boss_label.draw()
-
+        # 1. 배경 및 스프라이트 배치 (대각선 구도)
+        # 보스(레시라무): 우측 상단 (더 위로 올림)
+        boss_sprite_x, boss_y = 650, 450
+        arcade.draw_rect_filled(arcade.XYWH(boss_sprite_x, boss_y, 180, 180), arcade.color.DARK_RED)
+        
+        # 플레이어 1: 좌측 하단 (더 왼쪽으로)
+        p1_sprite_x, p1_sprite_y = 120, 220
         p1_color = arcade.color.BLUE if not self.active_p1.is_fainted() else arcade.color.GRAY
-        arcade.draw_rect_filled(arcade.XYWH(200, 250, 100, 100), p1_color)
-        self.p1_label.text = f"1. {self.active_p1.ko_name}\nHP: {self.active_p1.hp}/{self.active_p1.max_hp}"
-        self.p1_label.draw()
-
+        arcade.draw_rect_filled(arcade.XYWH(p1_sprite_x, p1_sprite_y, 120, 120), p1_color)
+        
+        # 플레이어 2: 좌측 하단 (더 왼쪽으로)
+        p2_sprite_x, p2_sprite_y = 270, 220
         p2_color = arcade.color.PURPLE if not self.active_p2.is_fainted() else arcade.color.GRAY
-        arcade.draw_rect_filled(arcade.XYWH(600, 250, 100, 100), p2_color)
-        self.p2_label.text = f"2. {self.active_p2.ko_name}\nHP: {self.active_p2.hp}/{self.active_p2.max_hp}"
-        self.p2_label.draw()
+        arcade.draw_rect_filled(arcade.XYWH(p2_sprite_x, p2_sprite_y, 120, 120), p2_color)
 
+        # 2. UI 프레임 배치
+        # 보스 UI: 좌측 상단, 왼쪽 끝에 밀착
+        # 프레임 너비가 약 250px이므로 x=125 정도면 왼쪽 끝에 닿음
+        boss_ui_x = (self.tex_hp_enemy.width * 1.2) / 2
+        self.draw_hp_ui(boss_ui_x, 530, self.boss, is_enemy=True)
+        
+        # 플레이어 UI: 우측 하단, 오른쪽 끝에 밀착
+        player_ui_x = SCREEN_WIDTH - (self.tex_hp_player.width * 1.2) / 2
+        self.draw_hp_ui(player_ui_x, 300, self.active_p1, is_enemy=False)
+        self.draw_hp_ui(player_ui_x, 200, self.active_p2, is_enemy=False)
+
+        # 3. 하단 UI 박스 및 로그/메뉴
         arcade.draw_rect_outline(arcade.XYWH(400, 80, 780, 140), arcade.color.WHITE, 2)
 
         if self.current_state in [STATE_P1_ACTION, STATE_P2_ACTION]:
