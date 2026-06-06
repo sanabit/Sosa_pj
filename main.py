@@ -41,22 +41,37 @@ class StoryView(arcade.View):
 class TitleView(arcade.View):
     def __init__(self):
         super().__init__()
+        # 타이틀 배경 이미지 로드
+        self.background = arcade.load_texture("ui/title.png")
+        
         self.menu_index = 0
         self.menu_options = ["1. 게임 시작", "2. 업적", "3. 게임 종료"]
-        self.title_text = arcade.Text(SCREEN_TITLE, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 150,
-                                      arcade.color.WHITE, font_size=40, anchor_x="center", bold=True)
         self.option_texts = [arcade.Text("", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - (i * 60),
                                         arcade.color.WHITE, font_size=24, anchor_x="center")
                              for i in range(len(self.menu_options))]
 
     def on_show_view(self):
-        arcade.set_background_color(arcade.color.DARK_BLUE_GRAY)
+        arcade.set_background_color(arcade.color.BLACK)
 
     def on_draw(self):
         self.clear()
-        self.title_text.draw()
+        
+        # 배경 이미지 렌더링 (800x680)
+        # 상단을 화면에 맞추고 아래 80픽셀을 잘라내기 위해 중심 y를 260으로 설정
+        # (중심 260 + 절반 높이 340 = 상단 600)
+        arcade.draw_texture_rect(self.background, arcade.XYWH(SCREEN_WIDTH / 2, 260, 800, 680))
         
         for i, option in enumerate(self.menu_options):
+            y_pos = SCREEN_HEIGHT / 2 - (i * 60)
+            
+            # 투명도가 적용된 회색 사각형 (RGBA: 60, 60, 60, 150)
+            bg_color = (60, 60, 60, 150)
+            arcade.draw_rect_filled(arcade.XYWH(SCREEN_WIDTH / 2, y_pos + 12, 250, 45), bg_color)
+            
+            # 선택된 메뉴는 테두리를 그려서 강조
+            if i == self.menu_index:
+                arcade.draw_rect_outline(arcade.XYWH(SCREEN_WIDTH / 2, y_pos + 12, 250, 45), arcade.color.YELLOW, 2)
+            
             t = self.option_texts[i]
             t.color = arcade.color.YELLOW if i == self.menu_index else arcade.color.WHITE
             prefix = "▶ " if i == self.menu_index else "  "
@@ -88,7 +103,7 @@ class AchievementView(arcade.View):
             ("wide_guard_block", "와이드가드로 광역 공격 막기"),
             ("haze_reset", "흑안개로 레시라무 능력치 초기화")
         ]
-        self.achievement_texts = [arcade.Text("", 100, SCREEN_HEIGHT - 200 - (i * 50), 
+        self.achievement_texts = [arcade.Text("", 100, SCREEN_HEIGHT - 200 - (i * 80), 
                                               arcade.color.WHITE, font_size=20)
                                   for i in range(len(self.achievement_info))]
         self.back_text = arcade.Text("'B' 키를 눌러 타이틀로 돌아가기", SCREEN_WIDTH / 2, 100,
