@@ -22,27 +22,98 @@ STATE_FAINT_SWITCH = 9
 class StoryView(arcade.View):
     def __init__(self):
         super().__init__()
-        self.text1 = arcade.Text("테스트 진행중, 123, 456,", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 50,
-                                 arcade.color.WHITE, font_size=20, anchor_x="center")
-        self.text2 = arcade.Text("아무 키나 눌러 시작하세요...", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 - 50,
-                                 arcade.color.GRAY, font_size=16, anchor_x="center")
+        self.time_elapsed = 0.0
+        self.phase = 0
+        
+        # 사운드 로드
+        self.sound_earth = arcade.Sound("audio/Earth1.ogg")
+        self.sound_reshiram = arcade.Sound("audio/RESHIRAM.ogg")
+        self.sound_zekrom = arcade.Sound("audio/ZEKROM.ogg")
+        
+        self.played_earth1 = False
+        self.played_earth2 = False
+        self.played_reshiram = False
+        self.played_zekrom = False
+        
+        # 텍스트 객체 초기화
+        t1 = "플라스마단의 숨겨진 연구소... 그곳에서 최악의 사태가 발생했다.\n\n강제적인 실험의 부작용으로, 이성을 잃고 폭주하는 레시라무."
+        self.story_text1 = arcade.Text(t1, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2,
+                                       arcade.color.WHITE, font_size=18, anchor_x="center", anchor_y="center", align="center", multiline=True, width=700)
+                                       
+        t2 = "하나지방이 푸른 화염에 집어삼켜지려는 찰나.."
+        self.story_text2 = arcade.Text(t2, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2,
+                                       arcade.color.WHITE, font_size=18, anchor_x="center", anchor_y="center", align="center")
+                                       
+        t3 = "푸른 번개와 함께 제크로무가 나타나 \n\n당신에게 힘을 빌려달라 부탁한다.\n\n 폭주하는 레시라무를 잠재우고 하나지방을 구하라!"
+        self.story_text3 = arcade.Text(t3, SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2,
+                                       arcade.color.WHITE, font_size=18, anchor_x="center", anchor_y="center", align="center", multiline=True, width=700)
+                                       
+        self.skip_text = arcade.Text("S 키를 눌러 스킵", SCREEN_WIDTH - 20, SCREEN_HEIGHT - 30,
+                                     arcade.color.GRAY, font_size=14, anchor_x="right")
 
     def on_show_view(self):
         arcade.set_background_color(arcade.color.BLACK)
 
+    def on_update(self, delta_time):
+        self.time_elapsed += delta_time
+        
+        # 사운드 재생 제어
+        if self.time_elapsed >= 3.0 and not self.played_earth1:
+            self.sound_earth.play()
+            self.played_earth1 = True
+        
+        if self.time_elapsed >= 4.0 and not self.played_earth2:
+            self.sound_earth.play()
+            self.played_earth2 = True
+            
+        if self.time_elapsed >= 5.0 and not self.played_reshiram:
+            self.sound_reshiram.play()
+            self.played_reshiram = True
+            
+        if self.time_elapsed >= 10.0 and not self.played_zekrom:
+            self.sound_zekrom.play()
+            self.played_zekrom = True
+            
+        # 페이즈 제어 및 자동 화면 전환 (페이즈 변수 대신 직접 시간으로 렌더링)
+        if self.time_elapsed >= 15.0:
+            self.window.show_view(TitleView())
+
     def on_draw(self):
         self.clear()
-        self.text1.draw()
-        self.text2.draw()
+        
+        # 1. 붉은 점멸 (5.0초 ~ 5.5초)
+        if 5.0 <= self.time_elapsed <= 5.5:
+            arcade.draw_rect_filled(arcade.XYWH(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, SCREEN_WIDTH, SCREEN_HEIGHT), arcade.color.DARK_RED)
+            
+        # 2. 푸른 페이드인 (10.0초 이후 2초간 서서히)
+        if self.time_elapsed >= 10.0:
+            progress = min(1.0, (self.time_elapsed - 10.0) / 2.0)
+            alpha = int(255 * progress)
+            # 투명도를 지원하는 파란색 (R, G, B, A)
+            blue_color = (0, 0, 139, alpha)
+            arcade.draw_rect_filled(arcade.XYWH(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, SCREEN_WIDTH, SCREEN_HEIGHT), blue_color)
+        
+        # 스토리 텍스트 렌더링
+        if self.time_elapsed < 5.0:
+            self.story_text1.draw()
+        elif 5.5 < self.time_elapsed < 10.0: # 붉은 점멸이 끝난 직후부터 텍스트 표시
+            self.story_text2.draw()
+        elif self.time_elapsed >= 10.0:
+            self.story_text3.draw()
+            
+        self.skip_text.draw()
 
     def on_key_press(self, key, _modifiers):
-        self.window.show_view(TitleView())
+        if key == arcade.key.S:
+            self.window.show_view(TitleView())
 
 class TitleView(arcade.View):
     def __init__(self):
         super().__init__()
         # 타이틀 배경 이미지 로드
         self.background = arcade.load_texture("ui/title.png")
+        # 게임 시작 시 재생할 사운드
+        self.sound_start = arcade.Sound("audio/RESHIRAM.ogg")
         
         self.menu_index = 0
         self.menu_options = ["1. 게임 시작", "2. 업적", "3. 게임 종료"]
@@ -85,6 +156,7 @@ class TitleView(arcade.View):
             self.menu_index = (self.menu_index + 1) % len(self.menu_options)
         elif key == arcade.key.ENTER:
             if self.menu_index == 0:
+                self.sound_start.play()
                 self.window.show_view(BattleView())
             elif self.menu_index == 1:
                 self.window.show_view(AchievementView())
